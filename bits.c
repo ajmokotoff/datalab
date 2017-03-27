@@ -172,10 +172,10 @@ NOTES:
  *   Rating: 2
  */
 int oddBits(void) {
-  int mask = 0xAA;
-  int word = mask | mask<<8;
+  int mask = 0xAA;  /* Creates 10101010 with leading zeros */
+  int word = mask | mask<<8;  /* Push mask over 8, then or it, which essentially doubles the size of the mask */
 
-  return word | word<<16;
+  return word | word<<16;  /*  Double the size again to fit a 32 bit integer */
 }
 /*
  * isTmin - returns 1 if x is the minimum, two's complement number,
@@ -185,7 +185,8 @@ int oddBits(void) {
  *   Rating: 1
  */
 int isTmin(int x) {
-  return 2;
+  return !(x+x) & !!(x);
+  /* Sum with itself and return logical not, then and with opposite of logical not of original value */
 }
 /* 
  * bitXor - x^y using only ~ and & 
@@ -195,7 +196,7 @@ int isTmin(int x) {
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  return (~(~(~x & y) & (~(x & ~y))));
 }
 /* 
  * conditional - same as x ? y : z 
@@ -205,8 +206,8 @@ int bitXor(int x, int y) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  x = !!x;
-  return (((x << 31) >> 31) & y) | (((!x << 31) >> 31) & z);
+  x = !!x;  /*  turn x into only 0 or 1  */
+  return (((x << 31) >> 31) & y) | (((!x << 31) >> 31) & z);  /*  if x was 1, it will and with z, if not, it will do nothing causing it to bne anded with z  */
 }
 /* 
  * greatestBitPos - return a mask that marks the position of the
@@ -217,7 +218,14 @@ int conditional(int x, int y, int z) {
  *   Rating: 4 
  */
 int greatestBitPos(int x) {
-  return 2;
+  int y = x;  
+  y = y | (y >> 1);
+  y = y | (y >> 2);
+  y = y | (y >> 4);
+  y = y | (y >> 8);
+  y = y | (y >> 16);
+  
+  return y & (( ~y >> 1) + (1 << 31 & x >> 31));
 }
 /* 
  * divpwr2 - Compute x/(2^n), for 0 <= n <= 30
@@ -228,7 +236,7 @@ int greatestBitPos(int x) {
  *   Rating: 2
  */
 int divpwr2(int x, int n) {
-    return 2;
+    return (x + (((1 << n) + ~0) & (x >> 31))) >> n;
 }
 /* 
  * isNonNegative - return 1 if x >= 0, return 0 otherwise 
@@ -252,7 +260,15 @@ int isNonNegative(int x) {
  *   Rating: 3
  */
 int satMul2(int x) {
-  return 2;
+  int tmin = 0x1 << 31;
+  int sign = x >> 31;
+  int x2x, tooLarge, sat2;
+
+  x2x = x+x;
+  tooLarge = (x^x2x) >> 31;
+  sat2 = tooLarge & (sign ^ ~tmin);
+
+  return (sat2) | (~tooLarge & x2x);
 }
 /* 
  * isLess - if x < y  then return 1, else return 0 
@@ -262,7 +278,11 @@ int satMul2(int x) {
  *   Rating: 3
  */
 int isLess(int x, int y) {
-  return 2;
+  int neg = x + ( ~y + 1);
+  int flag1 = x & ~y;
+  int flag2 = ~(x ^ y) & neg;
+
+  return (flag1 | flag2) >> 31 & 1;
 }
 /* 
  * isAsciiDigit - return 1 if 0x30 <= x <= 0x39 (ASCII codes for characters '0' to '9')
@@ -274,7 +294,12 @@ int isLess(int x, int y) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  int y, z;
+
+  y = x + (~0x2F);  /*  if y=0, then 0x30 <= x = True  */
+  z = (~x) + 0x3a;  /*  if z=0, then x <= 0x39 = True  */
+
+  return !((y | z) >> 31);
 }
 /*
  * trueThreeFourths - multiplies by 3/4 rounding toward 0,
@@ -288,7 +313,10 @@ int isAsciiDigit(int x) {
  */
 int trueThreeFourths(int x)
 {
-  return 2;
+  int integer = (x >> 1) + (x >> 2);
+  int fraction = ((((x & 1) << 1) + (x & 3)) & 7);
+
+  return integer + ((fraction >> 2) & 1) + ((!!(fraction & 3)) & (integer >> 31));
 }
 /*
  * ilog2 - return floor(log base 2 of x), where x > 0
@@ -298,7 +326,27 @@ int trueThreeFourths(int x)
  *   Rating: 4
  */
 int ilog2(int x) {
-  return 2;
+  int shift1, shift2, shift3, shift4;
+  int high_bytes = (0xFF << 24) + (0xFF << 16);
+  int high_bits = 0xF0;
+
+  int third_byte = 0xFF << 8;
+  int mid_bits = 0x0C;
+  int twos_bit = 0x02;
+
+  shift1 = (!!(x & high_bytes)) << 4;
+  x = x >> shift1;
+  
+  shift2 = (!!(x & third_byte)) << 3;
+  x = x >> shift2;
+
+  shift3 = (!!(x & high_bits)) << 2;
+  x = x >> shift3;
+
+  shift4 = (!!(x & mid_bits)) << 1;
+  x = x >> shift4;
+
+  return shift1 + shift2 + shift3 + shift4 + ((!!(x & twos_bit)));
 }
 /* 
  * float_neg - Return bit-level equivalent of expression -f for
@@ -312,7 +360,16 @@ int ilog2(int x) {
  *   Rating: 2
  */
 unsigned float_neg(unsigned uf) {
- return 2;
+  int signless = ((~(1<<31)) & uf);
+  int exp = signless >> 23;
+  if (exp == 0xFF) {  /*  is exponent not all 1s  */
+    int fracshift = uf << 9;
+    if (fracshift != 0) {  /*  is frac zero  */
+      return uf;
+    }
+  }
+
+  return uf ^ (1<<31);  /*  If exp bits are not all 1s and frac is not zero, return this  */
 }
 /* 
  * float_i2f - Return bit-level equivalent of expression (float) x
@@ -324,7 +381,40 @@ unsigned float_neg(unsigned uf) {
  *   Rating: 4
  */
 unsigned float_i2f(int x) {
-  return 2;
+  unsigned shiftLeft, afterShift, tmp, flag, sign;
+  unsigned abs_x=x;
+  
+  sign=0;
+  shiftLeft=0;
+
+  if (x==0) {
+    return 0;
+  }
+
+  if (x < 0) {
+    sign=0x80000000;
+    abs_x = -x;
+  }
+
+  afterShift = abs_x;
+  while(1) {
+    tmp = afterShift;
+    afterShift<<=1;
+    shiftLeft++;
+    if (tmp & 0x80000000) {
+      break;
+    }
+  }
+ 
+  if ((afterShift & 0x01ff)>0x0100) {
+    flag=1;
+  } else if ((afterShift & 0x03ff)==0x0300) {
+    flag=1;
+  } else {
+    flag=0;
+  }
+
+  return sign + (afterShift>>9) + ((159-shiftLeft)<<23) + flag;
 }
 /* 
  * float_twice - Return bit-level equivalent of expression 2*f for
@@ -338,5 +428,18 @@ unsigned float_i2f(int x) {
  *   Rating: 4
  */
 unsigned float_twice(unsigned uf) {
-  return 2;
+  unsigned temp = uf & 0x7F800000;
+  unsigned sign = uf & 0x80000000;
+  if (temp) {
+    if ( temp != 0x7F800000 ) {
+      uf = uf + 0x00800000;
+      if (temp == 0x7F000000) {
+        uf = (uf & 0xFF800000);
+      }
+    }
+  } else {
+    uf = ( uf << 1) | sign;  /*  If in denormal form we will add sign and shift left 1  */
+  }
+
+  return uf;
 }
